@@ -25,7 +25,13 @@ const (
 )
 
 func ExportHandler(w http.ResponseWriter, r *http.Request) {
-	yt, err := ytServiceViaBasicAuth(r)
+	refreshToken := r.URL.Query().Get("refreshToken")
+	if refreshToken == "" {
+		http.Error(w, "please specify refresh token", http.StatusBadRequest)
+		return
+	}
+
+	yt, err := ytServiceFromRefreshToken(r.Context(), refreshToken)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return

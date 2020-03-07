@@ -1,8 +1,7 @@
 package pkg
 
 import (
-	"errors"
-	"net/http"
+	"context"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -51,20 +50,15 @@ func init() {
 	oauthConfig.ClientSecret = cfg.GoogleClientSecret
 }
 
-func ytServiceViaBasicAuth(r *http.Request) (*youtube.Service, error) {
-	_, password, ok := r.BasicAuth()
-	if !ok || password == "" {
-		return nil, errors.New("please provide refresh token")
-	}
-
+func ytServiceFromRefreshToken(ctx context.Context, refreshToken string) (*youtube.Service, error) {
 	oauthToken := &oauth2.Token{
 		Expiry:       time.Now(),
 		TokenType:    "Bearer",
-		RefreshToken: password,
+		RefreshToken: refreshToken,
 	}
 
 	return youtube.NewService(
-		r.Context(),
-		option.WithTokenSource(oauthConfig.TokenSource(r.Context(), oauthToken)),
+		ctx,
+		option.WithTokenSource(oauthConfig.TokenSource(ctx, oauthToken)),
 	)
 }
