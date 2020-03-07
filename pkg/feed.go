@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"go.uber.org/zap"
-	"google.golang.org/api/youtube/v3"
 )
 
 const (
@@ -31,39 +30,42 @@ func ExportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	yt, err := ytServiceFromRefreshToken(r.Context(), refreshToken)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
-
-	var items []*youtube.Subscription
-
-	var pageToken string
-	for {
-		logger.Info("making YouTube API request", zap.String("page_token", pageToken))
-
-		resp, err := yt.Subscriptions.
-			List("snippet").
-			MaxResults(50).
-			Order("alphabetical").
-			Mine(true).
-			PageToken(pageToken).
-			Do()
+	items := readSubsCache(refreshToken)
+	if len(items) <= 0 {
+		yt, err := ytServiceFromRefreshToken(r.Context(), refreshToken)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
 
-		items = append(items, resp.Items...)
+		var pageToken string
+		for {
+			logger.Info("making YouTube API request", zap.String("page_token", pageToken))
 
-		pageToken = resp.NextPageToken
-		if resp.NextPageToken == "" {
-			break
+			resp, err := yt.Subscriptions.
+				List("snippet").
+				MaxResults(50).
+				Order("alphabetical").
+				Mine(true).
+				PageToken(pageToken).
+				Do()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			items = append(items, resp.Items...)
+
+			pageToken = resp.NextPageToken
+			if resp.NextPageToken == "" {
+				break
+			}
 		}
-	}
 
-	logger.Info("found items", zap.Int("amount", len(items)))
+		logger.Info("received item from API", zap.Int("amount", len(items)))
+
+		storeSubsCache(refreshToken, items)
+	}
 
 	var result string
 	for _, item := range items {
